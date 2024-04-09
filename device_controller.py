@@ -1,38 +1,55 @@
-from fan_control import FanActuator
-from led_pwm import LEDActuator
-from temp_humi_sensor import TempHumiditySensor
+from sensors import ISensor, AReading
+from actuators import IActuator, ACommand
+from temp_humi_sensor import TempController
+from fan_control import FanController
+from led_pwm import LEDController
 from time import sleep
 
+class DeviceController:
 
-class Device_Controller:
-    def __init__(self) -> None:
-        self.led = LEDActuator(gpio=12)
-        self.fan = FanActuator(gpio=16)
-        self.sensor = TempHumiditySensor()
+    def __init__(self):
+        self._sensors = self._init_sensors()
+        self._actuators = self._init_actuators()
 
-    def control_actuators(self) -> None:
-        led_duration = "1" if self.led.duration == "2" else "2"
-        self.led.control_actuator(led_duration)
-        fan_state = "1" if self.fan.current_state == "0" else "0"
-        self.fan.control_actuator(fan_state)
+    def _init_sensors(self) -> list[ISensor]:
+        return [TempController(bus=4, model="AHT20", reading_type=AReading.Type.TEMPERATURE)]
 
-    def read_sensors(self) -> None:
-        print(f"{self.sensor.read_sensor()}") 
+    def _init_actuators(self) -> list[IActuator]:
+        return [
+            LEDController(pin=16, cmd_type=ACommand.Type.LIGHT_PULSE, state="OFF"),
+            FanController(pin=22, cmd_type=ACommand.Type.FAN, state="OFF"),
+        ]
 
-    def loop(self):
-        while True:
-            self.control_actuators()
-            self.read_sensors()
-            sleep(2)
+    def read_sensors(self) -> list[AReading]:
+        data = []
+        for device in self._sensors:
+            data += device.read_sensor()
+        return data
 
-
-def main():
-    controller = Device_Controller()
-    controller.loop()
-
+    def control_actuators(self, cmds: list[ACommand]) -> None:
+        for cmd in cmds:
+            for device in self._actuators:
+                if device.validate_command(cmd):
+                    device.control_actuator(cmd.value)
 
 if __name__ == "__main__":
-    try: 
-        main()
-    except KeyboardInterrupt:
-        pass
+    hub = DeviceController()
+    test_interval = 3
+
+    while True:
+        sensor_readings = hub.read_sensors()
+        print(sensor_readings)
+
+        on_cmds = [
+            ACommand(target=ACommand.Type.FAN, value="ON"),
+            ACommand(target=ACommand.Type.LIGHT_PULSE, value="ON"),
+        ]
+        hub.control_actuators(on_cmds)
+        sleep(test_interval)
+
+        off_cmds = [
+            ACommand(target=ACommand.Type.FAN, value="OFF"),
+            ACommand(target=ACommand.Type.LIGHT_PULSE, value="OFF"),
+        ]
+        hub.control_actuators(off_cmds)
+        sleep(test_interval)

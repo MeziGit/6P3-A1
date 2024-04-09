@@ -1,38 +1,26 @@
 from gpiozero import PWMLED
-from signal import pause
+from actuators import IActuator, ACommand
 
-class LEDActuator:
-    def __init__(self, gpio:int) -> None:
-        self.led = PWMLED(gpio)
-        self.duration = 0
+class LEDActuator(IActuator):
+    def __init__(self, gpio: int) -> None:
+        self._gpio = gpio
+        self.type = ACommand.Type.LIGHT_PULSE
+        self._led = PWMLED(gpio)
+        self._current_state = "0"
 
-    def control_actuator(self, value:str) -> bool:
-        previous_duration = self.duration
+    def validate_command(self, command: ACommand) -> bool:
+        return command.target_type == ACommand.Type.LIGHT_PULSE
 
+    def control_actuator(self, value: str) -> bool:
         try:
-            self.duration = float(value)
-        except TypeError:
-            print(f"Invalid argument {value}, must be a float")
-
-        self.led.pulse(
-            fade_in_time = self.duration/2, 
-            fade_out_time = self.duration/2, 
-            n = 2, background=False)
-
-        return previous_duration != self.duration
-
-
-def main():
-    led = LEDActuator(gpio=12)
-    duration = 2
-    print(f"LED pulsing twice for {duration} seconds...")
-    led.control_actuator(duration)
-    print(f"Finished. Press CTRL-C to exit.")
-    pause()
-
-
-if __name__ == "__main__":
-    try: 
-        main()
-    except KeyboardInterrupt:
-        pass
+            duration = float(value)
+            self._led.pulse(
+                fade_in_time=duration/2, 
+                fade_out_time=duration/2, 
+                n=1, 
+                background=False
+            )
+            self._current_state = "1"
+            return True
+        except ValueError:
+            return False
